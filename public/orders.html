@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quản Lý Bán Hàng - Danh Sách Đơn Hàng</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Thanh điều hướng -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container">
+      <a class="navbar-brand" href="index.html">Quản Lý Bán Hàng</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav me-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="index.html">Tổng Quan</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="products.html">Danh Sách Sản Phẩm</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="add-product.html">Thêm Sản Phẩm</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link active" href="orders.html">Danh Sách Đơn Hàng</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="add-order.html">Tạo Đơn Hàng</a>
+          </li>
+        </ul>
+        <div class="auth-buttons">
+          <button id="logout" class="btn btn-danger">Đăng xuất</button>
+          <span id="username-display" class="text-white ms-2"></span>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Nội dung chính -->
+  <div class="container mt-4">
+    <div class="card p-4 shadow">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5">Danh Sách Đơn Hàng</h2>
+        <a href="add-order.html" class="btn btn-success">Tạo Đơn Hàng</a>
+      </div>
+      <table class="table table-bordered">
+        <thead class="table-dark">
+          <tr>
+            <th>STT</th>
+            <th>Khách hàng</th>
+            <th>Tổng giá</th>
+            <th>Trạng thái</th>
+            <th>Sản phẩm</th>
+            <th>Hành động</th>
+          </tr>
+        </thead>
+        <tbody id="order-list">
+        </tbody>
+      </table>
+      <nav>
+        <ul class="pagination justify-content-center" id="pagination">
+        </ul>
+      </nav>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js"></script>
+  <script>
+    let token = localStorage.getItem('token');
+    let username = localStorage.getItem('username');
+    let currentPage = 1;
+    const ordersPerPage = 5;
+
+    // Kiểm tra trạng thái đăng nhập
+    window.onload = () => {
+      if (!token || !username) {
+        window.location.href = 'index.html';
+      } else {
+        document.getElementById('username-display').textContent = `Xin chào, ${username}`;
+        loadOrders();
+      }
+    };
+
+    // Xử lý nút "Đăng xuất"
+    document.getElementById('logout').addEventListener('click', () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('username');
+      window.location.href = 'index.html';
+    });
+
+    // Load danh sách đơn hàng
+    function loadOrders() {
+      fetch('/api/orders', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(res => {
+          if (res.status === 401 || res.status === 403) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            window.location.href = 'index.html';
+            throw new Error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+          }
+          if (!res.ok) throw new Error(`Lỗi HTTP: ${res.status} - ${res.statusText}`);
+          return res.json();
+        })
+        .then(orders => {
+          displayOrders(orders);
+        })
+        .catch(err => {
+          console.error('Lỗi khi tải danh sách đơn hàng:', err);
+          alert('Lỗi khi tải danh sách đơn hàng: ' + err.message);
+        });
+    }
+
+    // Hiển thị danh sách đơn hàng với phân trang
+    function displayOrders(orders) {
+      const orderList = document.getElementById('order-list');
+      orderList.innerHTML = '';
+
+      const start = (currentPage - 1) * ordersPerPage;
+      const end = start + ordersPerPage;
+      const paginatedOrders = orders.slice(start, end);
+
+      paginatedOrders.forEach((order, index) => {
+        const items = order.items.map(item => `${item.quantity}x Sản phẩm ${item.product_id}`).join(', ');
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${start + index + 1}</td>
+          <td>${order.customer_name}</td>
+          <td>${order.total_price.toFixed(2)}</td>
+          <td>
+            <select class="form-select" onchange="updateOrderStatus(${order.id}, this.value)">
+              <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>Đang xử lý</option>
+              <option value="completed" ${order.status === 'completed' ? 'selected' : ''}>Hoàn thành</option>
+              <option value="processing" ${order.status === 'processing' ? 'selected' : ''}>Đang xử lý</option>
+            </select>
+          </td>
+          <td>${items}</td>
+          <td>
+            <button class="btn btn-primary btn-sm me-2" onclick="editOrder(${order.id})">Sửa</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteOrder(${order.id})">Xóa</button>
+          </td>
+        `;
+        orderList.appendChild(row);
+      });
+
+      // Hiển thị phân trang
+      const totalPages = Math.ceil(orders.length / ordersPerPage);
+      const pagination = document.getElementById('pagination');
+      pagination.innerHTML = '';
+
+      const prevLi = document.createElement('li');
+      prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+      prevLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${currentPage - 1})">Trước</a>`;
+      pagination.appendChild(prevLi);
+
+      for (let i = 1; i <= totalPages; i++) {
+        const li = document.createElement('li');
+        li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+        li.innerHTML = `<a class="page-link" href="#" onclick="changePage(${i})">${i}</a>`;
+        pagination.appendChild(li);
+      }
+
+      const nextLi = document.createElement('li');
+      nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+      nextLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${currentPage + 1})">Sau</a>`;
+      pagination.appendChild(nextLi);
+    }
+
+    // Chuyển trang
+    function changePage(page) {
+      currentPage = page;
+      loadOrders();
+    }
+
+    // Cập nhật trạng thái đơn hàng
+    function updateOrderStatus(id, status) {
+      fetch(`/api/orders/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status })
+      })
+        .then(res => {
+          if (res.status === 401 || res.status === 403) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            window.location.href = 'index.html';
+            throw new Error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+          }
+          if (!res.ok) throw new Error(`Lỗi HTTP: ${res.status} - ${res.statusText}`);
+          return res.json();
+        })
+        .then(() => {
+          alert('Cập nhật trạng thái đơn hàng thành công!');
+          loadOrders();
+        })
+        .catch(err => {
+          console.error('Lỗi khi cập nhật trạng thái đơn hàng:', err);
+          alert('Lỗi khi cập nhật trạng thái đơn hàng: ' + err.message);
+        });
+    }
+
+    // Sửa đơn hàng
+    function editOrder(id) {
+      window.location.href = `add-order.html?id=${id}`;
+    }
+
+    // Xóa đơn hàng
+    function deleteOrder(id) {
+      if (confirm('Bạn có chắc chắn muốn xóa đơn hàng này?')) {
+        fetch(`/api/orders/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+          .then(res => {
+            if (res.status === 401 || res.status === 403) {
+              localStorage.removeItem('token');
+              localStorage.removeItem('username');
+              window.location.href = 'index.html';
+              throw new Error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+            }
+            if (!res.ok) throw new Error(`Lỗi HTTP: ${res.status} - ${res.statusText}`);
+            return res.json();
+          })
+          .then(() => {
+            alert('Xóa đơn hàng thành công!');
+            loadOrders();
+          })
+          .catch(err => {
+            console.error('Lỗi khi xóa đơn hàng:', err);
+            alert('Lỗi khi xóa đơn hàng: ' + err.message);
+          });
+      }
+    }
+  </script>
+</body>
+</html>

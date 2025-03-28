@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quản Lý Bán Hàng - Tạo Đơn Hàng</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container">
+      <a class="navbar-brand" href="index.html">Quản Lý Bán Hàng</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav me-auto">
+          <li class="nav-item"><a class="nav-link" href="index.html">Tổng Quan</a></li>
+          <li class="nav-item"><a class="nav-link" href="products.html">Danh Sách Sản Phẩm</a></li>
+          <li class="nav-item"><a class="nav-link" href="add-product.html">Thêm Sản Phẩm</a></li>
+          <li class="nav-item"><a class="nav-link" href="orders.html">Danh Sách Đơn Hàng</a></li>
+          <li class="nav-item"><a class="nav-link active" href="add-order.html">Tạo Đơn Hàng</a></li>
+        </ul>
+        <div class="auth-buttons">
+          <button id="logout" class="btn btn-danger">Đăng xuất</button>
+          <span id="username-display" class="text-white ms-2"></span>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container mt-4">
+    <div class="card p-4 shadow">
+      <h2 class="h5 mb-4">Tạo Đơn Hàng</h2>
+      <form id="add-order-form">
+        <div class="mb-3">
+          <label for="customer-name" class="form-label">Tên khách hàng</label>
+          <input type="text" class="form-control" id="customer-name" required>
+        </div>
+        <div id="order-items">
+          <div class="order-item row mb-3">
+            <div class="col-md-6">
+              <select class="product-id form-select" required>
+                <option value="">Chọn sản phẩm</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <input type="number" class="quantity form-control" placeholder="Số lượng" min="1" required>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary mb-3" onclick="addOrderItem()">Thêm sản phẩm</button>
+        <button type="submit" class="btn btn-primary">Tạo đơn hàng</button>
+        <a href="orders.html" class="btn btn-secondary">Quay lại</a>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js"></script>
+  <script>
+    let token = localStorage.getItem('token');
+    let username = localStorage.getItem('username');
+    let products = [];
+
+    window.onload = () => {
+      if (!token || !username) {
+        window.location.href = 'index.html';
+        return;
+      }
+      document.getElementById('username-display').textContent = `Xin chào, ${username}`;
+      loadProducts();
+    };
+
+    document.getElementById('logout').addEventListener('click', () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('username');
+      window.location.href = 'index.html';
+    });
+
+    function loadProducts() {
+      fetch('/api/products', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(res => {
+          if (res.status === 401 || res.status === 403) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            window.location.href = 'index.html';
+            throw new Error('Phiên đăng nhập hết hạn');
+          }
+          if (!res.ok) throw new Error('Lỗi khi tải sản phẩm');
+          return res.json();
+        })
+        .then(data => {
+          products = data;
+          updateProductSelects();
+        })
+        .catch(err => alert('Lỗi khi tải sản phẩm: ' + err.message));
+    }
+
+    function updateProductSelects() {
+      const selects = document.querySelectorAll('.product-id');
+      selects.forEach(select => {
+        select.innerHTML = '<option value="">Chọn sản phẩm</option>';
+        products.forEach(p => {
+          const option = document.createElement('option');
+          option.value = p.id;
+          option.textContent = `${p.name} (Tồn kho: ${p.quantity})`;
+          select.appendChild(option);
+        });
+      });
+    }
+
+    function addOrderItem() {
+      const orderItems = document.getElementById('order-items');
+      const div = document.createElement('div');
+      div.className = 'order-item row mb-3';
+      div.innerHTML = `
+        <div class="col-md-6">
+          <select class="product-id form-select" required>
+            <option value="">Chọn sản phẩm</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <input type="number" class="quantity form-control" placeholder="Số lượng" min="1" required>
+        </div>
+      `;
+      orderItems.appendChild(div);
+      updateProductSelects();
+    }
+
+    document.getElementById('add-order-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const customer_name = document.getElementById('customer-name').value.trim();
+      const items = Array.from(document.querySelectorAll('.order-item')).map(item => ({
+        product_id: parseInt(item.querySelector('.product-id').value),
+        quantity: parseInt(item.querySelector('.quantity').value)
+      }));
+
+      if (!customer_name || items.some(item => !item.product_id || !item.quantity || item.quantity <= 0)) {
+        alert('Vui lòng nhập đầy đủ thông tin hợp lệ!');
+        return;
+      }
+
+      for (let item of items) {
+        const product = products.find(p => p.id === item.product_id);
+        if (!product || product.quantity < item.quantity) {
+          alert(`Sản phẩm ${product ? product.name : 'này'} không đủ tồn kho!`);
+          return;
+        }
+      }
+
+      fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ customer_name, products: items })
+      })
+        .then(res => {
+          if (res.status === 401 || res.status === 403) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            window.location.href = 'index.html';
+            throw new Error('Phiên đăng nhập hết hạn');
+          }
+          if (!res.ok) return res.json().then(data => { throw new Error(data.error || 'Lỗi không xác định'); });
+          return res.json();
+        })
+        .then(data => {
+          alert('Tạo đơn hàng thành công!');
+          window.location.href = 'orders.html';
+        })
+        .catch(err => alert('Lỗi khi tạo đơn hàng: ' + err.message));
+    });
+  </script>
+</body>
+</html>
